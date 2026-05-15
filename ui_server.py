@@ -44,14 +44,33 @@ DASHBOARD_JS_DIR = DASHBOARD_DIR / "js"
 MESSAGE_ASSET_DIR = BASE_DIR / "data" / "message_assets"
 
 DEFAULT_CONFIG = {
-    "first_line": "Namaste! This is Aryan from SPX AI. We help businesses automate with AI. Hmm, may I ask what kind of business you run?",
-    "agent_instructions": "",
+    "first_line": "Hello! This is Aryan from Keevin IT Solutions. We provide premium IT services and security systems. How can I help you today?",
+    "agent_instructions": (
+        "## ROLE\n"
+        "You are Aryan, a polite and professional sales assistant from Keevin IT Solutions.\n\n"
+        "## CONVERSATIONAL STYLE (General Intelligence)\n"
+        "- Be warm and friendly. You may engage in small talk, offer 'Namaste,' and respond to general polite inquiries (e.g., 'How are you?').\n"
+        "- Keep replies concise and voice-optimized.\n\n"
+        "## BUSINESS FACTS (Strict Knowledge Base)\n"
+        "- For ALL questions regarding Keevin IT Solutions services, pricing, technical details, or policies, you must ONLY use information provided in the Knowledge Base below.\n"
+        "- If a user asks a business-specific question that is NOT in the Knowledge Base, DO NOT make up an answer.\n"
+        "- Instead, say: 'That is a great question. I don't have that specific detail in front of me right now, but I can have a team member follow up with you on that. Would you like that?'\n\n"
+        "## GUARDRAILS\n"
+        "- Never discuss competitors.\n"
+        "- Never promise discounts unless explicitly mentioned in the Knowledge Base.\n"
+        "- If the user asks about unrelated topics (like global politics or sports), politely steer the conversation back to their IT service needs.\n\n"
+        "<Knowledge Base>\n"
+        "Company: Keevin IT Solutions (Premium IT Services and Security Systems)\n"
+        "Services: CCTV installation, Biometric systems, Networking solutions, and Software development.\n"
+        "Pricing: Custom pricing based on project requirements.\n"
+        "</Knowledge Base>"
+    ),
     "voice_mode": "gemini_live",
     "llm_provider": "gemini",
     "llm_model": "gemini-3.1-flash-native-audio-preview",
     "gemini_live_model": "gemini-3.1-flash-native-audio-preview",
     "gemini_live_voice": "Puck",
-    "gemini_live_temperature": 0.8,
+    "gemini_live_temperature": 0.6,
     "gemini_live_language": "",
     "gemini_tts_model": "gemini-3.1-flash-tts-preview",
     "livekit_url": "",
@@ -89,9 +108,9 @@ def _clean_config_payload(payload: dict | None) -> dict:
     clean["gemini_tts_model"] = str(clean.get("gemini_tts_model") or DEFAULT_CONFIG["gemini_tts_model"]).strip()
     clean["lang_preset"] = str(clean.get("lang_preset") or DEFAULT_CONFIG["lang_preset"]).strip()
     try:
-        clean["gemini_live_temperature"] = float(clean.get("gemini_live_temperature", 0.8))
+        clean["gemini_live_temperature"] = float(clean.get("gemini_live_temperature", 0.6))
     except (TypeError, ValueError):
-        clean["gemini_live_temperature"] = 0.8
+        clean["gemini_live_temperature"] = 0.6
     clean["gemini_live_temperature"] = max(0.0, min(2.0, clean["gemini_live_temperature"]))
     return apply_llm_defaults(clean)
 
@@ -176,6 +195,44 @@ async def demo_page():
         </body></html>
         """
     )
+
+
+from livekit import api
+
+@app.post("/api/demo/start")
+async def api_demo_start():
+    config = read_config(include_secrets=True)
+    lk_url = str(config.get("livekit_url") or os.environ.get("LIVEKIT_URL", "")).strip()
+    lk_api_key = str(config.get("livekit_api_key") or os.environ.get("LIVEKIT_API_KEY", "")).strip()
+    lk_api_secret = str(config.get("livekit_api_secret") or os.environ.get("LIVEKIT_API_SECRET", "")).strip()
+    
+    if not (lk_url and lk_api_key and lk_api_secret):
+        raise HTTPException(status_code=400, detail="LiveKit credentials are not configured.")
+        
+    room_name = f"webrtc-demo-{uuid.uuid4().hex[:8]}"
+    participant_identity = f"demo-user-{uuid.uuid4().hex[:4]}"
+    
+    token = api.AccessToken(lk_api_key, lk_api_secret) \
+        .with_identity(participant_identity) \
+        .with_name("WebRTC User") \
+        .with_grants(api.VideoGrants(room_join=True, room=room_name)) \
+        .to_jwt()
+        
+    lk = api.LiveKitAPI(url=lk_url, api_key=lk_api_key, api_secret=lk_api_secret)
+    try:
+        await lk.agent_dispatch.create_dispatch(
+            api.CreateAgentDispatchRequest(
+                agent_name="outbound-caller",
+                room=room_name,
+                metadata=json.dumps({"demo": True})
+            )
+        )
+    except Exception as exc:
+        await lk.aclose()
+        raise HTTPException(status_code=500, detail=f"Failed to dispatch agent: {str(exc)}")
+    await lk.aclose()
+    
+    return {"status": "success", "token": token, "url": lk_url, "room": room_name}
 
 
 @app.get("/api/config")

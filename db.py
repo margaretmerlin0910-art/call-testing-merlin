@@ -4,7 +4,12 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from supabase import Client, create_client
+try:
+    from supabase import Client, create_client
+except ImportError:
+    Client = Any
+    create_client = None
+
 logger = logging.getLogger('db')
 _SUPABASE_CLIENT: Client | None = None
 _SUPABASE_CLIENT_KEY: tuple[str, str] | None = None
@@ -115,6 +120,8 @@ def _normalize_appointment_payload(payload: dict[str, Any], *, current: dict[str
     return {'title': title, 'contact_name': contact_name, 'contact_phone': contact_phone, 'scheduled_start': start_dt.isoformat(), 'scheduled_end': end_dt.isoformat(), 'timezone': timezone_name, 'status': status, 'notes': notes, 'source': source}
 
 def get_supabase() -> Client | None:
+    if create_client is None:
+        return None
     url = os.environ.get('SUPABASE_URL', '')
     key = os.environ.get('SUPABASE_KEY', '')
     if not url or not key:

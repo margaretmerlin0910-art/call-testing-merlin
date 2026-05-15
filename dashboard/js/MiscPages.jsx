@@ -220,47 +220,94 @@ function LanguagePage() {
 }
 
 function DemoPage() {
-  const [generated, setGenerated] = React.useState(false);
-  const [label, setLabel] = React.useState('Escala Realty - Property Demo');
-  const [expiry, setExpiry] = React.useState('7');
-  const [copied, setCopied] = React.useState(false);
-  const link = `${window.location.origin}/demo`;
+  const [status, setStatus] = React.useState('disconnected'); // disconnected, connecting, connected
+  const [error, setError] = React.useState('');
+  const [room, setRoom] = React.useState(null);
 
-  const handleCopy = () => {
-    navigator.clipboard?.writeText(link).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const handleStart = async () => {
+    setStatus('connecting');
+    setError('');
+    try {
+      const res = await fetch('/api/demo/start', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to start demo');
+
+      if (!window.LivekitClient) throw new Error("LiveKit Client not loaded. Please refresh.");
+
+      const newRoom = new window.LivekitClient.Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+
+      newRoom
+        .on(window.LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          if (track.kind === window.LivekitClient.Track.Kind.Audio) {
+            const element = track.attach();
+            document.body.appendChild(element);
+          }
+        })
+        .on(window.LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+          track.detach().forEach(el => el.remove());
+        })
+        .on(window.LivekitClient.RoomEvent.Disconnected, () => {
+          setStatus('disconnected');
+          setRoom(null);
+        });
+
+      await newRoom.connect(data.url, data.token);
+      
+      await newRoom.localParticipant.setMicrophoneEnabled(true);
+
+      setRoom(newRoom);
+      setStatus('connected');
+    } catch (e) {
+      setError(e.message);
+      setStatus('disconnected');
+    }
+  };
+
+  const handleStop = async () => {
+    if (room) {
+      await room.disconnect();
+    }
+    setStatus('disconnected');
+    setRoom(null);
   };
 
   return (
     <div>
-      <C.PageHeader title="Demo Link" sub="Generate a shareable demo link for prospects or investors" />
+      <C.PageHeader title="Voice Agent Demo" sub="Talk directly to Aryan through your browser" />
       <div style={{ maxWidth: 560, display: 'grid', gap: 20 }}>
-        <C.Card style={{ padding: 24 }}>
-          <div style={{ display: 'grid', gap: 16 }}>
-            <C.Input label="Demo Label" value={label} onChange={setLabel} placeholder="Name for this demo link" />
-            <C.Select label="Link Expiry" value={expiry} onChange={setExpiry}
-              options={[{ value: '1', label: '1 day' }, { value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '0', label: 'Never expires' }]} />
-            <C.Btn variant="primary" onClick={() => setGenerated(true)}>Generate Demo Link</C.Btn>
+        <C.Card style={{ padding: 32, textAlign: 'center' }}>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: status === 'connected' ? 'rgba(52,211,153,0.1)' : 'rgba(90,126,245,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', border: `2px solid ${status === 'connected' ? '#34d399' : '#5a7ef5'}` }}>
+             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={status === 'connected' ? '#34d399' : '#5a7ef5'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
           </div>
-        </C.Card>
+          
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#e8eaef' }}>
+            {status === 'connected' ? 'Conversation Active' : 'Ready to Talk?'}
+          </h2>
+          <p style={{ fontSize: 14, color: '#7b849a', marginBottom: 32 }}>
+            {status === 'connected' 
+              ? 'Aryan is listening. Speak into your microphone.' 
+              : 'Click the button below to start a live voice conversation with your Keevin IT Solutions agent.'}
+          </p>
 
-        {generated && (
-          <C.Card style={{ padding: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#7b849a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Your Demo Link</div>
-            <div style={{ background: '#1a1e28', border: '1px solid rgba(90,126,245,0.3)', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 13, color: '#a0b0f0', marginBottom: 12, wordBreak: 'break-all' }}>
-              {link}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <C.Btn variant="primary" size="sm" onClick={handleCopy}>{copied ? 'Copied' : 'Copy Link'}</C.Btn>
-              <C.Btn variant="ghost" size="sm" onClick={() => window.open(link, '_blank')}>Open in Tab</C.Btn>
-            </div>
-            <div style={{ fontSize: 12, color: '#5a6375', marginTop: 12 }}>
-              Expires in {expiry === '0' ? 'never' : `${expiry} day${expiry === '1' ? '' : 's'}`} · Label: {label}
-            </div>
-          </C.Card>
-        )}
+          {error && <div style={{ marginBottom: 20, color: '#f87171', fontSize: 13 }}>{error}</div>}
+
+          {status === 'disconnected' ? (
+            <C.Btn variant="primary" style={{ width: '100%', padding: '12px', fontSize: 15 }} onClick={handleStart}>
+              Start Conversation
+            </C.Btn>
+          ) : status === 'connecting' ? (
+            <C.Btn variant="primary" style={{ width: '100%', padding: '12px', fontSize: 15, opacity: 0.7 }} disabled>
+              Connecting...
+            </C.Btn>
+          ) : (
+            <C.Btn variant="ghost" style={{ width: '100%', padding: '12px', fontSize: 15, color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }} onClick={handleStop}>
+              End Conversation
+            </C.Btn>
+          )}
+        </C.Card>
       </div>
     </div>
   );
