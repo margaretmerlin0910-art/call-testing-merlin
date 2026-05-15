@@ -73,33 +73,20 @@ function ModelsTab({ cfg, set }) {
 }
 
 function CredentialsTab({ cfg, set }) {
-  const [show, setShow] = React.useState({});
-  const toggleShow = k => setShow(p => ({ ...p, [k]: !p[k] }));
-  const SecretInput = ({ label, k, hint }) => (
-    <div style={{ display: 'grid', gap: 5 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: '#7b849a', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</label>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input type={show[k] ? 'text' : 'password'} value={cfg[k] || ''} onChange={e => set(k)(e.target.value)}
-          style={{ flex: 1, background: '#1a1e28', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#e8eaef', fontSize: 13, padding: '9px 12px', fontFamily: 'monospace', outline: 'none' }} />
-        <button onClick={() => toggleShow(k)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#7b849a', cursor: 'pointer', padding: '0 12px', fontSize: 12 }}>
-          {show[k] ? 'Hide' : 'Show'}
-        </button>
-      </div>
-      {hint && <span style={{ fontSize: 11, color: '#5a6375' }}>{hint}</span>}
-    </div>
-  );
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <C.SectionTitle>LiveKit</C.SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <C.Input label="LiveKit URL" value={cfg.livekit_url || ''} onChange={set('livekit_url')} mono placeholder="wss://…" />
         <C.Input label="SIP Trunk ID" value={cfg.sip_trunk_id || ''} onChange={set('sip_trunk_id')} mono />
-        <SecretInput label="API Key" k="livekit_api_key" />
-        <SecretInput label="API Secret" k="livekit_api_secret" />
+        <C.Input label="API Key" value={cfg.livekit_api_key || ''} onChange={set('livekit_api_key')} mono />
+        <C.Input label="API Secret" value={cfg.livekit_api_secret || ''} onChange={set('livekit_api_secret')} mono />
       </div>
       <C.SectionTitle>AI Provider Secrets</C.SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <SecretInput label="Google API Key" k="google_api_key" />
+        <C.Input label="Google API Key" value={cfg.google_api_key || ''} onChange={set('google_api_key')} mono />
+        <C.Input label="Deepgram API Key" value={cfg.deepgram_api_key || ''} onChange={set('deepgram_api_key')} mono />
+        <C.Input label="ElevenLabs API Key" value={cfg.elevenlabs_api_key || ''} onChange={set('elevenlabs_api_key')} mono />
       </div>
     </div>
   );

@@ -25,10 +25,10 @@ def _bootstrap_venv() -> None:
 _bootstrap_venv()
 load_dotenv()
 
-from livekit.agents import JobContext, WorkerOptions, cli
+import asyncio
+from livekit.agents import JobContext, WorkerOptions, cli, stt, tts, llm, AutoSubscribe
 from livekit.agents.voice import Agent, AgentSession
-from livekit.plugins import silero
-
+from livekit.plugins import silero, deepgram, elevenlabs
 try:
     from livekit.plugins import google as google_plugin
 except ImportError:
@@ -101,29 +101,23 @@ class MinimalVoiceAgent(Agent):
         self._first_line = str(config.get("first_line") or DEFAULT_CONFIG["first_line"]).strip()
 
     def _build_stt(self, config: dict):
-        if google_plugin is None:
-            raise RuntimeError("livekit-plugins-google is required to start the voice agent.")
-        language = str(config.get("gemini_live_language") or "").strip() or None
-        kwargs = {}
-        if language:
-            kwargs["language"] = language
-        return google_plugin.STT(**kwargs)
+        api_key = str(config.get("deepgram_api_key") or os.environ.get("DEEPGRAM_API_KEY") or "").strip()
+        return deepgram.STT(api_key=api_key)
 
     def _build_llm(self, config: dict):
         if google_plugin is None:
             raise RuntimeError("livekit-plugins-google is required to start the voice agent.")
         model = str(config.get("gemini_live_model") or DEFAULT_CONFIG["gemini_live_model"]).strip()
-        return google_plugin.LLM(model=model)
+        api_key = str(config.get("google_api_key") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+        return google_plugin.LLM(model=model, api_key=api_key)
 
     def _build_tts(self, config: dict):
-        if google_plugin is None:
-            raise RuntimeError("livekit-plugins-google is required to start the voice agent.")
-        voice = str(config.get("gemini_live_voice") or DEFAULT_CONFIG["gemini_live_voice"]).strip()
-        language = str(config.get("gemini_live_language") or "").strip() or None
-        kwargs = {"voice_name": voice}
-        if language:
-            kwargs["language"] = language
-        return google_plugin.TTS(**kwargs)
+        api_key = str(config.get("elevenlabs_api_key") or os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+        return elevenlabs.TTS(
+            api_key=api_key, 
+            voice_id="pNInz6obpgnuS75pcn9f",
+            model_id="eleven_monolingual_v1"
+        )
 
     async def on_enter(self):
         if self._first_line:
@@ -133,18 +127,36 @@ class MinimalVoiceAgent(Agent):
 async def entrypoint(ctx: JobContext):
     config = read_config()
     logger.info("Worker joined room: %s", ctx.room.name)
+    
+    agent = MinimalVoiceAgent(config)
     session = AgentSession(
         vad=silero.VAD.load(),
         turn_detection="stt",
         min_endpointing_delay=0.15,
     )
+    
     await session.start(
-        agent=MinimalVoiceAgent(config),
+        agent=agent,
         room=ctx.room,
     )
+    
+    # Trigger the opening greeting immediately after session starts
+    if agent._first_line:
+        await session.say(agent._first_line, allow_interruptions=True)
+    
+    # Keep the agent alive
+    await asyncio.Future()
 
 
 if __name__ == "__main__":
+    config = read_config()
+    if config.get("livekit_url"):
+        os.environ["LIVEKIT_URL"] = str(config["livekit_url"]).strip()
+    if config.get("livekit_api_key"):
+        os.environ["LIVEKIT_API_KEY"] = str(config["livekit_api_key"]).strip()
+    if config.get("livekit_api_secret"):
+        os.environ["LIVEKIT_API_SECRET"] = str(config["livekit_api_secret"]).strip()
+
     worker_host = str(os.environ.get("AGENT_HOST") or "0.0.0.0").strip() or "0.0.0.0"
     worker_port = int(str(os.environ.get("AGENT_PORT") or "8081"))
     cli.run_app(

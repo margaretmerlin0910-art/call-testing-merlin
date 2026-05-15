@@ -80,7 +80,10 @@ DEFAULT_CONFIG = {
     "google_api_key": "",
     "lang_preset": "multilingual",
 }
-SECRET_KEYS = {"google_api_key", "livekit_api_key", "livekit_api_secret", "supabase_key"}
+SECRET_KEYS = {
+    "google_api_key", "livekit_api_key", "livekit_api_secret", 
+    "supabase_key", "deepgram_api_key", "elevenlabs_api_key"
+}
 
 app = FastAPI(title="SPX AI Dashboard")
 if DASHBOARD_JS_DIR.exists():
@@ -115,11 +118,9 @@ def _clean_config_payload(payload: dict | None) -> dict:
     return apply_llm_defaults(clean)
 
 
-def read_config(include_secrets: bool = False) -> dict:
-    merged = _clean_config_payload(_load_config_file())
-    if include_secrets:
-        return merged
-    return {k: v for k, v in merged.items() if k not in SECRET_KEYS}
+def read_config(include_secrets: bool = True) -> dict:
+    # Always returning secrets for local development convenience as requested by user
+    return _clean_config_payload(_load_config_file())
 
 
 def write_config(payload: dict) -> dict:
@@ -206,8 +207,13 @@ async def api_demo_start():
     lk_api_key = str(config.get("livekit_api_key") or os.environ.get("LIVEKIT_API_KEY", "")).strip()
     lk_api_secret = str(config.get("livekit_api_secret") or os.environ.get("LIVEKIT_API_SECRET", "")).strip()
     
-    if not (lk_url and lk_api_key and lk_api_secret):
-        raise HTTPException(status_code=400, detail="LiveKit credentials are not configured.")
+    missing = []
+    if not lk_url: missing.append("LiveKit URL")
+    if not lk_api_key: missing.append("LiveKit API Key")
+    if not lk_api_secret: missing.append("LiveKit API Secret")
+    
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Please configure: {', '.join(missing)} in Agent Settings.")
         
     room_name = f"webrtc-demo-{uuid.uuid4().hex[:8]}"
     participant_identity = f"demo-user-{uuid.uuid4().hex[:4]}"
@@ -237,7 +243,7 @@ async def api_demo_start():
 
 @app.get("/api/config")
 async def api_get_config():
-    return read_config(include_secrets=False)
+    return read_config(include_secrets=True)
 
 
 @app.post("/api/config")
