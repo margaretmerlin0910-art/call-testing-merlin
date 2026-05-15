@@ -116,7 +116,7 @@ class MinimalVoiceAgent(Agent):
         return elevenlabs.TTS(
             api_key=api_key, 
             voice_id="pNInz6obpgnuS75pcn9f",
-            model_id="eleven_monolingual_v1"
+            model="eleven_monolingual_v1"
         )
 
     async def on_enter(self):
